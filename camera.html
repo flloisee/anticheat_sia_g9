@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eye Check</title>
+  <link rel="stylesheet" href="camera.css">
+</head>
+<body>
+  <main class="app">
+    <header class="bar">
+      <div class="brand">
+        <span class="dot idle" id="dot"></span>
+        <h1>Eye Check</h1>
+      </div>
+      <button id="windowBtn" class="icon-btn" type="button" title="Open in a window" aria-label="Open in a window">⤢</button>
+    </header>
+
+    <section class="stage" id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay" aria-hidden="true"></canvas>
+      <span class="badge" id="badge" role="status" aria-live="polite">Camera off</span>
+
+      <div class="empty" id="empty">
+        <p class="empty-title" id="emptyTitle">Check if your eyes are visible</p>
+        <p class="empty-text" id="emptyText">Allow camera access to see a live preview with boxes around your eyes. Video stays on your device.</p>
+        <button class="primary" id="startBtn" type="button">Allow camera</button>
+      </div>
+    </section>
+
+    <footer>
+      <div class="legend">
+        <span><i class="swatch green"></i>Open</span>
+        <span><i class="swatch amber"></i>Closed</span>
+        <span class="mirror">Preview is mirrored</span>
+      </div>
+      <p class="note">Everything is processed on your device. Nothing is uploaded.</p>
+    </footer>
+  </main>
+  <script type="module" src="camera.js"></script>
+</body>
+</html>

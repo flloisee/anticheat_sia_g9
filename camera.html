@@ -13,7 +13,14 @@
         <span class="dot idle" id="dot"></span>
         <h1>Eye Check</h1>
       </div>
-      <button id="windowBtn" class="icon-btn" type="button" title="Open in a window" aria-label="Open in a window">⤢</button>
+      <div class="bar-actions">
+        <label class="toggle" title="Turn the camera on or off">
+          <input id="camToggle" type="checkbox" role="switch" aria-label="Camera">
+          <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+          <span class="toggle-text">Camera</span>
+        </label>
+        <button id="windowBtn" class="icon-btn" type="button" title="Open in a window" aria-label="Open in a window">⤢</button>
+      </div>
     </header>
 
     <section class="stage" id="stage">

@@ -25,6 +25,8 @@
 - Permission flow in `init()`: `navigator.permissions.query({name:'camera'})`; granted/null or `?window=1` → start; denied → blocked card with settings link; unknown → card that calls `openWindow()`.
 - `openWindow`/`openSettings` use `chrome.windows.create` / `chrome.tabs.create` when present, with `window.open`/no-op fallbacks. No manifest `permissions` are needed for these; don't add broad permissions.
 - Camera failures are mapped by `DOMException.name` in `handleCameraError` (NotAllowed/Security → blocked, NotFound/Overconstrained → no camera, NotReadable → busy). Add new cases there, not in `start()`.
+- The header **Camera** toggle (`#camToggle`) enables/starts the camera via `enableCamera()` and turns it off via `stopCamera()`, which releases the stream, closes the landmarker, clears the canvas, and shows the off card. Don't persist the toggle in storage; closing the popup already releases the camera.
+- `start()` is async and cancellable via the `session` counter: toggling off while the camera or detector is still loading must not leave a live track or landmarker behind.
 - Detection loop is `video.requestVideoFrameCallback(tick)`; canvas is sized from `videoWidth`/`videoHeight` on video `resize` and after play. `starting`/`running` guard against double starts.
 - `pagehide` stops tracks and closes the landmarker. Any new long-lived resource must be cleaned up there.
 - WASM and model paths use `new URL(..., import.meta.url)` so they resolve in both popup and window. Keep them relative.

@@ -14,6 +14,7 @@ const empty = $('empty');
 const emptyTitle = $('emptyTitle');
 const emptyText = $('emptyText');
 const startBtn = $('startBtn');
+const camToggle = $('camToggle');
 
 // Subject's eyes: 33/263 are the outer corners, the rest trace the lids.
 const RIGHT_EYE = [33, 160, 158, 133, 153, 144, 163, 7, 246];
@@ -23,9 +24,14 @@ let landmarker = null;
 let stream = null;
 let running = false;
 let starting = false;
+let session = 0;
 
 $('windowBtn').hidden = isWindow;
 $('windowBtn').addEventListener('click', openWindow);
+camToggle.addEventListener('change', () => {
+  if (camToggle.checked) enableCamera();
+  else stopCamera();
+});
 video.addEventListener('resize', resizeToVideo);
 
 init();
@@ -59,34 +65,69 @@ async function cameraPermission() {
   }
 }
 
+async function enableCamera() {
+  const permission = await cameraPermission();
+
+  if (permission === 'denied') {
+    setToggle(false);
+    showBlocked();
+    return;
+  }
+
+  if (permission === 'granted' || permission === null || isWindow) {
+    start();
+    return;
+  }
+
+  // Chrome closes popups when it shows the permission prompt, so use the window.
+  setToggle(false);
+  openWindow();
+}
+
 async function start() {
   if (starting || running) return;
+  const id = ++session;
   starting = true;
+  setToggle(true);
   hideCard();
   setBadge('Starting camera…', 'warn');
 
+  let nextStream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    nextStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
     });
   } catch (error) {
+    if (id !== session) return;
     starting = false;
+    setToggle(false);
     handleCameraError(error);
     return;
   }
 
+  // The toggle was switched off while the camera was starting.
+  if (id !== session) {
+    nextStream.getTracks().forEach((track) => track.stop());
+    return;
+  }
+
+  stream = nextStream;
   video.srcObject = stream;
   await video.play().catch(() => {});
+  if (id !== session) return;
   resizeToVideo();
 
   setBadge('Loading eye detector…', 'warn');
+  let nextLandmarker;
   try {
-    landmarker = await createLandmarker();
+    nextLandmarker = await createLandmarker();
   } catch (error) {
+    if (id !== session) return;
     console.error(error);
     stopStream();
     starting = false;
+    setToggle(false);
     setBadge('Camera off', 'idle');
     showCard(
       'The eye detector could not load',
@@ -97,11 +138,36 @@ async function start() {
     return;
   }
 
+  // The toggle was switched off while the detector was loading.
+  if (id !== session) {
+    nextLandmarker.close();
+    return;
+  }
+
+  landmarker = nextLandmarker;
   running = true;
   starting = false;
   setBadge('No eyes visible', 'idle');
   empty.hidden = true;
-  video.requestVideoFrameCallback(tick);
+  video.requestVideoFrameCallback(() => tick(id));
+}
+
+function stopCamera() {
+  session += 1;
+  running = false;
+  starting = false;
+  stopStream();
+  landmarker?.close();
+  landmarker = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  setToggle(false);
+  setBadge('Camera off', 'idle');
+  showCard(
+    'Camera is off',
+    'The camera is released until you turn it back on. Nothing is recorded or uploaded.',
+    'Turn on camera',
+    enableCamera,
+  );
 }
 
 async function createLandmarker() {
@@ -129,8 +195,8 @@ async function createLandmarker() {
   }
 }
 
-function tick() {
-  if (!running) return;
+function tick(id) {
+  if (!running || id !== session) return;
 
   if (video.readyState >= 2) {
     let result = null;
@@ -142,7 +208,7 @@ function tick() {
     draw(result);
   }
 
-  video.requestVideoFrameCallback(tick);
+  video.requestVideoFrameCallback(() => tick(id));
 }
 
 function resizeToVideo() {
@@ -262,6 +328,10 @@ function setBadge(text, tone) {
   dot.className = `dot ${tone}`;
 }
 
+function setToggle(on) {
+  camToggle.checked = on;
+}
+
 function showCard(title, text, actionLabel, onAction) {
   emptyTitle.textContent = title;
   emptyText.textContent = text;
@@ -341,7 +411,9 @@ function stopStream() {
 }
 
 window.addEventListener('pagehide', () => {
+  session += 1;
   running = false;
+  starting = false;
   stopStream();
   landmarker?.close();
   landmarker = null;

@@ -28,6 +28,7 @@ If the prompt never appears, open Chrome's site settings for the extension (`chr
 - `camera.js` gets a camera stream with `getUserMedia` and runs `FaceLandmarker` in `VIDEO` mode on each video frame.
 - Eye boxes are built from the face mesh's eye-contour landmarks, mirrored so they match the selfie preview.
 - `eyeBlinkLeft` / `eyeBlinkRight` blendshapes decide whether each eye is open or closed.
+- The **Camera** toggle in the header turns the camera off on demand: it stops the media tracks, closes the landmarker, clears the overlay, and shows a card to turn it back on. The state is not persisted; closing the popup already releases the camera.
 - The popup is `camera.html`; the same page opens in a larger window with `?window=1` for the permission prompt and a bigger preview.
 
 The MediaPipe WASM runtime and the `face_landmarker.task` model are bundled under `vendor/` and `models/`, so the extension works offline and needs no remote code (required by Manifest V3).

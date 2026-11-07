@@ -69,6 +69,68 @@ h1 {
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18);
 }
 
+.bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: #1e293b;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #94a3b8;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle input:checked + .track {
+  border-color: rgba(74, 222, 128, 0.6);
+  background: rgba(74, 222, 128, 0.25);
+}
+
+.toggle input:checked + .track .thumb {
+  background: var(--green);
+  transform: translateX(13px);
+}
+
+.toggle input:focus-visible + .track {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.toggle:hover .toggle-text { color: var(--text); }
+
 .icon-btn {
   width: 24px;
   height: 24px;

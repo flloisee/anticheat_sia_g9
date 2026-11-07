@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Eye Check",
+  "name": "Certification Anticheat",
   "version": "1.1.0",
   "description": "Camera eye check plus a tab/app switch counter for online exams.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
-    "default_title": "Eye Check",
+    "default_title": "Certification Anticheat",
     "default_popup": "camera.html"
   },
   "icons": {

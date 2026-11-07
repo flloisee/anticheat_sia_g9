@@ -35,6 +35,24 @@
       </div>
     </section>
 
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Anti-cheat</h2>
+        <span class="pill" id="acBadge">Off</span>
+      </div>
+      <p class="panel-note" id="acStatus">Counts when the watched tab is hidden or loses focus.</p>
+      <div class="panel-row">
+        <span class="metric">
+          <span class="metric-value" id="switchCount" aria-live="polite">0</span>
+          <span class="metric-label">tab / app switches</span>
+        </span>
+        <div class="panel-actions">
+          <button class="ghost" id="trackBtn" type="button" disabled>Track this tab</button>
+          <button class="ghost danger" id="stopBtn" type="button" hidden>Stop</button>
+        </div>
+      </div>
+    </section>
+
     <footer>
       <div class="legend">
         <span><i class="swatch green"></i>Open</span>
@@ -44,6 +62,7 @@
       <p class="note">Everything is processed on your device. Nothing is uploaded.</p>
     </footer>
   </main>
+  <script src="anticheat.js"></script>
   <script type="module" src="camera.js"></script>
 </body>
 </html>

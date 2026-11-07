@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Eye Check",
-  "version": "1.0.0",
-  "description": "Camera preview that puts a box around each eye and tells you if your eyes are visible.",
+  "version": "1.1.0",
+  "description": "Camera eye check plus a tab/app switch counter for online exams.",
+  "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_title": "Eye Check",
     "default_popup": "camera.html"

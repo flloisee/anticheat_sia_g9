@@ -233,6 +233,123 @@ h1 {
 
 .primary:focus-visible { outline: 2px solid #baf7cd; outline-offset: 2px; }
 
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.55);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pill {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pill.on {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--green);
+}
+
+.panel-note {
+  overflow: hidden;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.metric-value {
+  font-size: 19px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.metric-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.ghost {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.ghost:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.ghost:disabled {
+  color: #64748b;
+  cursor: default;
+}
+
+.ghost.danger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fca5a5;
+}
+
 footer { display: flex; flex-direction: column; gap: 3px; }
 
 .legend {

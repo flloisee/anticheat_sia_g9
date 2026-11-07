@@ -1,6 +1,9 @@
 // Popup-side anti-cheat panel. One watched tab at a time, counted by tracker.js
 // whenever that tab is hidden or the browser window loses focus.
 const AC_KEY = 'anticheat';
+// camera.html is also embedded as the small preview in the tracked page; the
+// panel and its listeners belong to the popup only.
+const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
 
 const trackBtn = document.getElementById('trackBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -15,16 +18,18 @@ let note = '';
 let released = false;
 let port = null;
 
-trackBtn.addEventListener('click', trackThisTab);
-stopBtn.addEventListener('click', stopTracking);
-chrome.storage.session.onChanged.addListener(onStorageChanged);
-chrome.tabs.onRemoved.addListener(onTabRemoved);
-addEventListener('pagehide', release);
-addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') release();
-});
+if (!PREVIEW && window.top === window) {
+  trackBtn.addEventListener('click', trackThisTab);
+  stopBtn.addEventListener('click', stopTracking);
+  chrome.storage.session.onChanged.addListener(onStorageChanged);
+  chrome.tabs.onRemoved.addListener(onTabRemoved);
+  addEventListener('pagehide', release);
+  addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') release();
+  });
 
-init();
+  init();
+}
 
 async function init() {
   await allowTrackerStorage();
@@ -115,6 +120,8 @@ async function trackThisTab() {
         title: tab.title || '',
         url: tab.url || '',
         count: 0,
+        // Lets only this tab's tracker start the embedded camera preview.
+        token: crypto.randomUUID(),
         startedAt: Date.now(),
       },
     });

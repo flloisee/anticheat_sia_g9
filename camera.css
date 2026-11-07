@@ -389,3 +389,28 @@ html.window .stage { max-height: none; }
 
 html.window .empty-title { font-size: 15px; }
 html.window .empty-text { font-size: 12.5px; }
+
+/* Embedded above the counter in the tracked page: only the video tile. */
+html.preview body {
+  width: auto;
+  min-height: 0;
+  background: transparent;
+}
+
+html.preview .app {
+  padding: 0;
+  gap: 0;
+}
+
+html.preview .bar,
+html.preview .panel,
+html.preview footer,
+html.preview .badge,
+html.preview .empty {
+  display: none;
+}
+
+html.preview .stage {
+  border: 0;
+  border-radius: 0;
+}

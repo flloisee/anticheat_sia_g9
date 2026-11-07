@@ -1,8 +1,11 @@
 import { FilesetResolver, FaceLandmarker } from './vendor/mediapipe/vision_bundle.mjs';
 
 const $ = (id) => document.getElementById(id);
-const isWindow = new URLSearchParams(location.search).get('window') === '1';
+const params = new URLSearchParams(location.search);
+const isWindow = params.get('window') === '1';
+const isPreview = params.get('preview') === '1';
 if (isWindow) document.documentElement.classList.add('window');
+if (isPreview) document.documentElement.classList.add('preview');
 
 const video = $('video');
 const canvas = $('overlay');
@@ -25,6 +28,10 @@ let stream = null;
 let running = false;
 let starting = false;
 let session = 0;
+let loopTimer = 0;
+let loopToken = 0;
+let lastRestart = 0;
+let wanted = false;
 
 $('windowBtn').hidden = isWindow;
 $('windowBtn').addEventListener('click', openWindow);
@@ -33,10 +40,28 @@ camToggle.addEventListener('change', () => {
   else stopCamera();
 });
 video.addEventListener('resize', resizeToVideo);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') resumeCamera();
+});
+addEventListener('focus', resumeCamera);
+// The camera page often sits minimized while the exam tab is in use, so any
+// Chrome window getting focus is the cue to bring the camera back.
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) resumeCamera();
+});
 
 init();
 
 async function init() {
+  // Any embedded frame must be the tracked tab's preview: its tracker holds the
+  // token, so other pages cannot use this page to turn the camera on. Never prompt.
+  if (window.top !== window) {
+    const { anticheat } = await chrome.storage.session.get('anticheat');
+    if (!isPreview || anticheat?.token !== params.get('token')) return;
+    if ((await cameraPermission()) === 'granted') start();
+    return;
+  }
+
   const permission = await cameraPermission();
 
   if (permission === 'granted' || permission === null || isWindow) {
@@ -88,6 +113,7 @@ async function start() {
   if (starting || running) return;
   const id = ++session;
   starting = true;
+  wanted = true;
   setToggle(true);
   hideCard();
   setBadge('Starting camera…', 'warn');
@@ -114,6 +140,7 @@ async function start() {
 
   stream = nextStream;
   video.srcObject = stream;
+  nextStream.getVideoTracks()[0]?.addEventListener('ended', onTrackEnded);
   await video.play().catch(() => {});
   if (id !== session) return;
   resizeToVideo();
@@ -149,13 +176,15 @@ async function start() {
   starting = false;
   setBadge('No eyes visible', 'idle');
   empty.hidden = true;
-  video.requestVideoFrameCallback(() => tick(id));
+  schedule(id);
 }
 
 function stopCamera() {
+  wanted = false;
   session += 1;
   running = false;
   starting = false;
+  stopLoop();
   stopStream();
   landmarker?.close();
   landmarker = null;
@@ -198,6 +227,13 @@ async function createLandmarker() {
 function tick(id) {
   if (!running || id !== session) return;
 
+  // A dropped capture may never fire another frame; recover without waiting
+  // for the user to touch the extension.
+  if (!stream?.active) {
+    restartCamera();
+    return;
+  }
+
   if (video.readyState >= 2) {
     let result = null;
     try {
@@ -207,8 +243,68 @@ function tick(id) {
     }
     draw(result);
   }
+}
 
-  video.requestVideoFrameCallback(() => tick(id));
+// Detect on a timer instead of requestVideoFrameCallback: hidden or occluded
+// windows stop presenting frames, which kills that loop for good. Timers always
+// resume, and Chrome only throttles them while the page is hidden (about once a
+// minute after five minutes, so minimized detection is coarse but not dead).
+function schedule(id) {
+  if (!running || id !== session) return;
+  const token = loopToken;
+  loopTimer = setTimeout(
+    () => {
+      if (token !== loopToken) return;
+      tick(id);
+      schedule(id);
+    },
+    document.visibilityState === 'hidden' ? 1000 : 100,
+  );
+}
+
+function stopLoop() {
+  loopToken += 1;
+  clearTimeout(loopTimer);
+}
+
+// The browser can release the capture while another app is in front. Reacquire
+// it in the background so it is already live when the user comes back. The
+// cooldown keeps a dead device from turning this into a getUserMedia loop.
+function restartCamera() {
+  if (starting || Date.now() - lastRestart < 5000) return;
+  lastRestart = Date.now();
+  running = false;
+  session += 1;
+  stopLoop();
+  stopStream();
+  landmarker?.close();
+  landmarker = null;
+  start();
+}
+
+// The window or any Chrome window is active again: make sure the camera is live
+// without waiting for a click. Works while the camera page stays minimized, and
+// retries a start that failed earlier.
+function resumeCamera() {
+  if (!wanted || starting) return;
+
+  if (!running) {
+    start();
+    return;
+  }
+
+  if (!stream?.active) {
+    restartCamera();
+    return;
+  }
+
+  video.play().catch(() => {});
+  stopLoop();
+  schedule(session);
+}
+
+function onTrackEnded() {
+  if (running) restartCamera();
 }
 
 function resizeToVideo() {
@@ -414,6 +510,7 @@ window.addEventListener('pagehide', () => {
   session += 1;
   running = false;
   starting = false;
+  stopLoop();
   stopStream();
   landmarker?.close();
   landmarker = null;

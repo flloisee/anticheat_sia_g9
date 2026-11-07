@@ -26,6 +26,7 @@
   let windowId = null;
   let hostEl = null;
   let valueEl = null;
+  let previewToken = null;
 
   const pageEvents = [
     ['visibilitychange', onStateChange],
@@ -91,6 +92,7 @@
     awayAtPause = false;
 
     const state = await readState();
+    previewToken = state?.tabId === tabId ? state.token ?? null : null;
     if (!disposed && enabled) paintBubble(state?.tabId === tabId ? state.count || 0 : 0);
   }
 
@@ -147,6 +149,7 @@
     windowId = null;
     away = false;
     awayAtPause = false;
+    previewToken = null;
     removeBubble();
   }
 
@@ -180,14 +183,31 @@
       'all: initial; position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; pointer-events: none;';
 
     const root = hostEl.attachShadow({ mode: 'open' });
+    const preview = previewToken
+      ? `<iframe class="preview" title="Eye Check camera preview" allow="camera" src="${
+          chrome.runtime.getURL('camera.html')
+        }?preview=1&amp;token=${encodeURIComponent(previewToken)}"></iframe>`
+      : '';
     root.innerHTML =
       '<style>' +
+      '.stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px}' +
+      '.preview{display:block;width:160px;height:120px;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:#04070c;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transition:opacity .15s}' +
       '.bubble{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(11,16,26,.88);color:#e5edf7;font:500 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);backdrop-filter:blur(8px)}' +
       '.value{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;color:#4ade80}' +
       '.label{color:#94a3b8;font-size:11px}' +
       '</style>' +
+      '<div class="stack">' +
+      preview +
       '<div class="bubble" role="status" aria-live="polite">' +
-      '<span class="value">0</span><span class="label">tab / app switches</span></div>';
+      '<span class="value">0</span><span class="label">tab / app switches</span></div>' +
+      '</div>';
+
+    const frame = root.querySelector('.preview');
+    // The preview page hides its own panel only after camera.js runs, so reveal
+    // the frame once it has loaded instead of flashing that panel.
+    frame?.addEventListener('load', () => {
+      frame.style.opacity = '1';
+    });
 
     valueEl = root.querySelector('.value');
     document.documentElement.append(hostEl);

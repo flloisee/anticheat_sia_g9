@@ -43,7 +43,7 @@ async function allowTrackerStorage() {
       accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS',
     });
   } catch (error) {
-    console.warn('Eye Check could not let the tracker use session storage.', error);
+    console.warn('Certification Anticheat could not let the tracker use session storage.', error);
   }
 }
 
@@ -127,7 +127,7 @@ async function attachTracker() {
     });
     keepAlive();
   } catch (error) {
-    console.warn('Eye Check could not reattach the tab monitor.', error);
+    console.warn('Certification Anticheat could not reattach the tab monitor.', error);
     note = 'Open this tab again and press Start monitoring to resume counting.';
   }
 }
@@ -163,7 +163,7 @@ async function trackThisTab() {
     keepAlive();
     note = '';
   } catch (error) {
-    console.warn('Eye Check could not track this tab.', error);
+    console.warn('Certification Anticheat could not track this tab.', error);
     await chrome.storage.session.remove(AC_KEY);
     note = 'This page cannot be watched. Try a normal web page.';
   }

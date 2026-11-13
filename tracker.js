@@ -59,7 +59,7 @@
     handle(message).then(
       () => sendResponse({ ok: true }),
       (error) => {
-        console.warn('Eye Check tracker:', error);
+        console.warn('Certification Anticheat tracker:', error);
         sendResponse({ ok: false });
       },
     );
@@ -184,7 +184,7 @@
 
     const root = hostEl.attachShadow({ mode: 'open' });
     const preview = previewToken
-      ? `<iframe class="preview" title="Eye Check camera preview" allow="camera" src="${
+      ? `<iframe class="preview" title="Certification Anticheat camera preview" allow="camera" src="${
           chrome.runtime.getURL('camera.html')
         }?preview=1&amp;token=${encodeURIComponent(previewToken)}"></iframe>`
       : '';
@@ -255,7 +255,7 @@
       await chrome.storage.session.set({ [KEY]: state });
       paintBubble(state.count || 0);
     } catch (error) {
-      console.warn('Eye Check tracker could not save the count.', error);
+      console.warn('Certification Anticheat tracker could not save the count.', error);
     }
   }
 })();

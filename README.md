@@ -18,7 +18,7 @@ The tab-switch counter is the first shipped signal. The camera check is an exper
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked** and select this folder.
-4. Pin **Eye Check** and click its toolbar icon.
+4. Pin **Certification Anticheat** and click its toolbar icon.
 
 ## How it works
 

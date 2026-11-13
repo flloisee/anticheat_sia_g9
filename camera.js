@@ -443,7 +443,7 @@ function hideCard() {
 function showBlocked() {
   showCard(
     'Camera is blocked',
-    'Allow camera access for this extension in Chrome site settings, then reopen Eye Check.',
+    'Allow camera access for this extension in Chrome site settings, then reopen Certification Anticheat.',
     'Open settings',
     openSettings,
   );

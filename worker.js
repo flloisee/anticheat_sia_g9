@@ -47,7 +47,7 @@ async function consent(choice, tab) {
     await send(tab.id, { type: 'anticheat:close-prompt' });
     return { ok: true };
   } catch (error) {
-    console.warn('Eye Check could not start monitoring from the prompt.', error);
+    console.warn('Certification Anticheat could not start monitoring from the prompt.', error);
     return { ok: false };
   }
 }
@@ -60,7 +60,7 @@ async function startTab(tabId) {
     await send(tabId, { type: 'anticheat:close-prompt' });
     return { ok: true };
   } catch (error) {
-    console.warn('Eye Check could not start monitoring.', error);
+    console.warn('Certification Anticheat could not start monitoring.', error);
     return { ok: false };
   }
 }
@@ -133,7 +133,7 @@ async function frameReasons(reasons, tab, documentId) {
     await send(tab.id, { type: 'anticheat:show-prompt', reasons: [...entry.reasons] });
     return { ok: true };
   } catch (error) {
-    console.warn('Eye Check could not offer monitoring for this page.', error);
+    console.warn('Certification Anticheat could not offer monitoring for this page.', error);
     return { ok: false };
   }
 }

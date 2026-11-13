@@ -18,10 +18,34 @@ const emptyTitle = $('emptyTitle');
 const emptyText = $('emptyText');
 const startBtn = $('startBtn');
 const camToggle = $('camToggle');
+const overlayToggle = $('overlayToggle');
 
 // Subject's eyes: 33/263 are the outer corners, the rest trace the lids.
 const RIGHT_EYE = [33, 160, 158, 133, 153, 144, 163, 7, 246];
 const LEFT_EYE = [263, 387, 385, 380, 373, 362, 390, 249, 466];
+// Iris centres in the 478-point mesh: the subject's right eye, then the left.
+const RIGHT_IRIS = 468;
+const LEFT_IRIS = 473;
+
+// Crude gaze heuristic: where the iris sits inside the eye's bounding box, averaged
+// over both eyes and smoothed. Fixed thresholds, no per-user calibration.
+const GAZE_ENTER_X = 0.12;
+const GAZE_ENTER_Y = 0.1;
+const GAZE_EXIT_X = 0.08;
+const GAZE_EXIT_Y = 0.07;
+const GAZE_SMOOTH = 0.3;
+const GAZE_WARMUP_MS = 2000;
+const AWAY_MS = 1200;
+
+// Mesh colour: white while on screen, yellow as the iris drifts, red at the away
+// entry threshold — the same point that starts the look-away timer.
+const GAZE_ON_COLOR = '#ffffff';
+const GAZE_MID_COLOR = '#facc15';
+const GAZE_AWAY_COLOR = '#ef4444';
+
+// The overlay switch is shared by every camera page (popup, window, on-page
+// preview) through session storage; a missing key means on.
+const OVERLAY_KEY = 'overlay';
 
 let landmarker = null;
 let stream = null;
@@ -32,6 +56,24 @@ let loopTimer = 0;
 let loopToken = 0;
 let lastRestart = 0;
 let wanted = false;
+// Smoothed iris offset from 0.5 in normalized eye-box space, its severity (0 on
+// screen, 1 away), plus the away episode.
+let gaze = { h: 0.5, v: 0.5, severity: 0, away: false, awaySince: 0, counted: false, warmupUntil: 0 };
+// The tracked tab's state, captured from the preview's token handshake in init().
+let trackedToken = null;
+let trackedTabId = null;
+// True while the tracked tab is focused and visible; posted by tracker.js (an iframe
+// reports document.hasFocus() false unless it is clicked itself).
+let previewFocused = false;
+// Visual only: hides the mesh and the eye boxes, never the badge or the counting.
+let overlayOn = true;
+
+// A preview only counts gaze while its tab is actually in front, so the popup it
+// opens on, or a tab switch, cannot bank an away episode.
+addEventListener('message', (event) => {
+  if (!isPreview || event.source !== window.parent) return;
+  if (event.data?.type === 'anticheat:focus') previewFocused = event.data.focused === true;
+});
 
 $('windowBtn').hidden = isWindow;
 $('windowBtn').addEventListener('click', openWindow);
@@ -39,6 +81,34 @@ camToggle.addEventListener('change', () => {
   if (camToggle.checked) enableCamera();
   else stopCamera();
 });
+
+// The checkbox is the input, session storage the mirror every camera page reads.
+function setOverlay(on) {
+  overlayOn = on !== false;
+  if (overlayToggle) overlayToggle.checked = overlayOn;
+}
+
+async function loadOverlay() {
+  try {
+    const stored = await chrome.storage.session.get(OVERLAY_KEY);
+    setOverlay(stored?.[OVERLAY_KEY]);
+  } catch (error) {
+    console.warn('Certification Anticheat could not read the overlay toggle.', error);
+  }
+}
+
+loadOverlay();
+overlayToggle?.addEventListener('change', () => {
+  setOverlay(overlayToggle.checked);
+  chrome.storage.session.set({ [OVERLAY_KEY]: overlayOn }).catch((error) => {
+    console.warn('Certification Anticheat could not save the overlay toggle.', error);
+  });
+});
+// Another camera page toggled it: follow, so the popup and preview cannot disagree.
+chrome.storage.session.onChanged.addListener((changes) => {
+  if (changes[OVERLAY_KEY]) setOverlay(changes[OVERLAY_KEY].newValue);
+});
+
 video.addEventListener('resize', resizeToVideo);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') resumeCamera();
@@ -58,6 +128,8 @@ async function init() {
   if (window.top !== window) {
     const { anticheat } = await chrome.storage.session.get('anticheat');
     if (!isPreview || anticheat?.token !== params.get('token')) return;
+    trackedToken = anticheat.token;
+    trackedTabId = anticheat.tabId;
     if ((await cameraPermission()) === 'granted') start();
     return;
   }
@@ -174,6 +246,9 @@ async function start() {
   landmarker = nextLandmarker;
   running = true;
   starting = false;
+  // Samples from before the camera was live are useless; the warm-up also covers
+  // the moment the eye detector settles.
+  resetGaze();
   setBadge('No eyes visible', 'idle');
   empty.hidden = true;
   schedule(id);
@@ -188,6 +263,7 @@ function stopCamera() {
   stopStream();
   landmarker?.close();
   landmarker = null;
+  resetGaze();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   setToggle(false);
   setBadge('Camera off', 'idle');
@@ -279,6 +355,7 @@ function restartCamera() {
   stopStream();
   landmarker?.close();
   landmarker = null;
+  resetGaze();
   start();
 }
 
@@ -314,6 +391,25 @@ function resizeToVideo() {
   canvas.height = video.videoHeight;
 }
 
+// Every detected landmark as a dot, mirrored like the boxes. The vendored bundle
+// does not export the mesh tesselation, so this is points, not a wireframe.
+function drawMesh(landmarks, color) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const scale = Math.max(1, canvas.width / 320);
+  const radius = Math.max(0.8, 1.3 * scale);
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (const point of landmarks) {
+    const x = (1 - point.x) * width;
+    const y = point.y * height;
+    ctx.moveTo(x + radius, y);
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+  }
+  ctx.fill();
+}
+
 function draw(result) {
   const width = canvas.width;
   const height = canvas.height;
@@ -321,6 +417,8 @@ function draw(result) {
   ctx.clearRect(0, 0, width, height);
 
   if (!landmarks) {
+    // A missing face is a glitch, never evidence of looking away.
+    clearAway();
     setBadge('No eyes visible', 'idle');
     return;
   }
@@ -333,21 +431,170 @@ function draw(result) {
   const rightBox = eyeBox(landmarks, RIGHT_EYE, width, height);
   const leftBox = eyeBox(landmarks, LEFT_EYE, width, height);
 
+  updateGaze(result, rightOpen && leftOpen);
+  if (overlayOn) drawMesh(landmarks, gazeColor(gaze.severity));
+
   if (!rightBox || !leftBox) {
+    clearAway();
     setBadge('Keep both eyes in frame', 'warn');
     return;
   }
 
-  drawEye(rightBox, 'R', rightOpen);
-  drawEye(leftBox, 'L', leftOpen);
+  const away = gaze.away;
+
+  if (overlayOn) {
+    drawEye(rightBox, 'R', rightOpen);
+    drawEye(leftBox, 'L', leftOpen);
+  }
 
   if (!rightOpen && !leftOpen) {
     setBadge('Eyes visible · closed', 'warn');
   } else if (!rightOpen || !leftOpen) {
     setBadge('Eyes visible · one closed', 'warn');
+  } else if (away) {
+    setBadge('Eyes visible · looking away', 'warn');
   } else {
     setBadge('Eyes visible · open', 'live');
   }
+}
+
+// Iris position inside the eye's normalized bounding box; 0.5, 0.5 is centred.
+// Unmirrored, like the landmarks: mirroring belongs to eyeBox() and the CSS.
+function irisOffset(landmarks, indices, irisIndex) {
+  const iris = landmarks[irisIndex];
+  let minX = 1;
+  let minY = 1;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (const index of indices) {
+    const point = landmarks[index];
+    if (!point) continue;
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  if (!iris || maxX <= minX || maxY <= minY) return null;
+
+  return {
+    h: (iris.x - minX) / (maxX - minX),
+    v: (iris.y - minY) / (maxY - minY),
+  };
+}
+
+// One usable gaze sample, or null when this frame cannot support an estimate.
+// Closed eyes and a missing 478-point mesh (no iris) fail conservatively.
+function gazeSample(result, open) {
+  if (!open) return null;
+  const landmarks = result?.faceLandmarks?.[0];
+  if (!landmarks || landmarks.length < 478) return null;
+
+  const right = irisOffset(landmarks, RIGHT_EYE, RIGHT_IRIS);
+  const left = irisOffset(landmarks, LEFT_EYE, LEFT_IRIS);
+  if (!right || !left) return null;
+
+  return { h: (right.h + left.h) / 2, v: (right.v + left.v) / 2 };
+}
+
+// Hysteresis: entering needs the wider threshold, leaving the tighter one, so a
+// value parked on the edge cannot flap the counter.
+function gazeAway(h, v, wasAway) {
+  const dx = Math.abs(h - 0.5);
+  const dy = Math.abs(v - 0.5);
+  if (wasAway) return !(dx <= GAZE_EXIT_X && dy <= GAZE_EXIT_Y);
+  return dx >= GAZE_ENTER_X || dy >= GAZE_ENTER_Y;
+}
+
+// 0 is centred, 1 is exactly the away entry threshold, flat above so red stays red.
+function gazeSeverity(h, v) {
+  const sx = Math.abs(h - 0.5) / GAZE_ENTER_X;
+  const sy = Math.abs(v - 0.5) / GAZE_ENTER_Y;
+  return Math.min(1, Math.max(sx, sy));
+}
+
+// Mesh colour across the severity scale, as a two-stop lerp.
+function gazeColor(severity) {
+  const s = Math.min(1, Math.max(0, severity));
+  const low = s < 0.5;
+  const from = rgb(low ? GAZE_ON_COLOR : GAZE_MID_COLOR);
+  const to = rgb(low ? GAZE_MID_COLOR : GAZE_AWAY_COLOR);
+  const t = low ? s * 2 : s * 2 - 1;
+  return `rgb(${from.map((value, i) => Math.round(value + (to[i] - value) * t)).join(', ')})`;
+}
+
+function rgb(hex) {
+  return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+}
+
+function updateGaze(result, open) {
+  const now = performance.now();
+  if (now < gaze.warmupUntil) return;
+
+  // Only the preview inside the tracked tab counts, and only while that tab is
+  // focused and visible: reading the popup is not looking away. The mesh and badge
+  // keep updating everywhere, so the gate never blocks the visual. Clearing here,
+  // before the sample check, keeps an unfocused blink from banking into a count.
+  const gated = isPreview && (!previewFocused || document.visibilityState !== 'visible');
+  if (gated) clearAway();
+
+  const sample = gazeSample(result, open);
+  if (!sample) return;
+
+  gaze.h += GAZE_SMOOTH * (sample.h - gaze.h);
+  gaze.v += GAZE_SMOOTH * (sample.v - gaze.v);
+  gaze.severity = gazeSeverity(gaze.h, gaze.v);
+
+  if (gated) return;
+
+  const away = gazeAway(gaze.h, gaze.v, gaze.away);
+  if (away !== gaze.away) {
+    gaze.away = away;
+    gaze.awaySince = away ? now : 0;
+    gaze.counted = false;
+  } else if (away && !gaze.counted && now - gaze.awaySince >= AWAY_MS) {
+    gaze.counted = true;
+    countLookAway();
+  }
+}
+
+// One count per sustained episode, and only ever into the tracked tab's own state.
+async function countLookAway() {
+  if (!isPreview || !trackedToken || !trackedTabId) return;
+
+  try {
+    const { anticheat } = await chrome.storage.session.get('anticheat');
+    if (!anticheat || anticheat.token !== trackedToken || anticheat.tabId !== trackedTabId) return;
+    await chrome.storage.session.set({
+      anticheat: {
+        ...anticheat,
+        lookAway: (anticheat.lookAway || 0) + 1,
+        last: { kind: 'away', at: Date.now() },
+      },
+    });
+  } catch (error) {
+    console.warn('Certification Anticheat could not save the look-away count.', error);
+  }
+}
+
+function clearAway() {
+  gaze.away = false;
+  gaze.awaySince = 0;
+  gaze.counted = false;
+}
+
+// Fresh camera session: forget the offset and start the warm-up again.
+function resetGaze() {
+  gaze = {
+    h: 0.5,
+    v: 0.5,
+    severity: 0,
+    away: false,
+    awaySince: 0,
+    counted: false,
+    warmupUntil: performance.now() + GAZE_WARMUP_MS,
+  };
 }
 
 // Mirrored coordinates so boxes line up with the selfie-style preview.
@@ -514,4 +761,55 @@ window.addEventListener('pagehide', () => {
   stopStream();
   landmarker?.close();
   landmarker = null;
+  resetGaze();
 });
+
+// Silent self-check for the gaze math: logs only if a threshold regresses.
+(() => {
+  const check = (label, actual, expected) => {
+    if (actual !== expected) {
+      console.error(`Certification Anticheat gaze self-check failed: ${label}`);
+    }
+  };
+
+  const eye = [{ x: 0.4, y: 0.4 }, { x: 0.6, y: 0.5 }];
+  const centred = irisOffset([...eye, { x: 0.5, y: 0.45 }], [0, 1], 2);
+  check(
+    'centred iris is 0.5, 0.5',
+    !!centred && Math.abs(centred.h - 0.5) < 1e-9 && Math.abs(centred.v - 0.5) < 1e-9,
+    true,
+  );
+  check('centred is not away', gazeAway(0.5, 0.5, false), false);
+  check('enter x is away', gazeAway(0.5 + GAZE_ENTER_X, 0.5, false), true);
+  check('enter y is away', gazeAway(0.5, 0.5 - GAZE_ENTER_Y - 0.001, false), true);
+  const band = 0.5 + (GAZE_EXIT_X + GAZE_ENTER_X) / 2;
+  check('hysteresis band holds away', gazeAway(band, 0.5, true), true);
+  check('exit threshold releases', gazeAway(0.5 + GAZE_EXIT_X - 0.001, 0.5, true), false);
+
+  check('centred severity is 0', gazeSeverity(0.5, 0.5), 0);
+  check(
+    'half the enter threshold is about 0.5',
+    Math.abs(gazeSeverity(0.5 + GAZE_ENTER_X / 2, 0.5) - 0.5) < 1e-9,
+    true,
+  );
+  check('enter threshold is severity 1', gazeSeverity(0.5 + GAZE_ENTER_X, 0.5), 1);
+  check('beyond the threshold is clamped', gazeSeverity(0.5 + GAZE_ENTER_X * 3, 0.5), 1);
+  const edges = [
+    [0.5 + GAZE_ENTER_X * 1.5, 0.5],
+    [0.5 - GAZE_ENTER_X * 1.5, 0.5],
+    [0.5, 0.5 + GAZE_ENTER_Y * 1.5],
+    [0.5, 0.5 - GAZE_ENTER_Y * 1.5],
+  ];
+  check(
+    'severity 1 matches gazeAway on both axes',
+    edges.every(([h, v]) => (gazeSeverity(h, v) >= 1) === gazeAway(h, v, false)),
+    true,
+  );
+
+  const flatFace = {
+    faceLandmarks: [Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5 }))],
+  };
+  check('closed eyes are skipped', gazeSample(flatFace, false), null);
+  check('degenerate eye box is skipped', gazeSample(flatFace, true), null);
+  check('short landmark list is skipped', gazeSample({ faceLandmarks: [[]] }, true), null);
+})();

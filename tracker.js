@@ -25,8 +25,17 @@
   let tabId = null;
   let windowId = null;
   let hostEl = null;
+  let frameEl = null;
   let valueEl = null;
+  let causeEl = null;
+  let audio = null;
+  let lastTotal = null;
   let previewToken = null;
+
+  // Three fast pings per increment: fixed, deliberately loud, no volume setting.
+  const PING_HZ = 1900;
+  const PING_GAIN = 0.5;
+  const PING_GAP = 0.18;
 
   const pageEvents = [
     ['visibilitychange', onStateChange],
@@ -36,8 +45,14 @@
   ];
 
   pageEvents.forEach(([type, listener]) => addEventListener(type, listener));
+  // Chrome keeps a fresh AudioContext suspended until the page is interacted with,
+  // so prime it on the first gesture instead of creating it at load.
+  addEventListener('pointerdown', primeAudio, { once: true, passive: true });
+  addEventListener('keydown', primeAudio, { once: true });
   chrome.runtime.onMessage.addListener(onMessage);
   chrome.runtime.onConnect.addListener(onConnect);
+  // The camera preview writes look-aways straight to storage; repaint from it.
+  chrome.storage.session.onChanged.addListener(onStorageChanged);
 
   globalThis.__eyeCheckTracker = { dispose };
 
@@ -46,9 +61,13 @@
     clearTimeout(resumeTimer);
     removeBubble();
     pageEvents.forEach(([type, listener]) => removeEventListener(type, listener));
+    removeEventListener('pointerdown', primeAudio);
+    removeEventListener('keydown', primeAudio);
+    audio?.close().catch(() => {});
     try {
       chrome.runtime.onMessage.removeListener(onMessage);
       chrome.runtime.onConnect.removeListener(onConnect);
+      chrome.storage.session.onChanged.removeListener(onStorageChanged);
     } catch {
       // The old extension context may already be invalid.
     }
@@ -93,7 +112,8 @@
 
     const state = await readState();
     previewToken = state?.tabId === tabId ? state.token ?? null : null;
-    if (!disposed && enabled) paintBubble(state?.tabId === tabId ? state.count || 0 : 0);
+    if (!disposed && enabled) paintBubble(state?.tabId === tabId ? state : null);
+    postFocus();
   }
 
   async function pause(message) {
@@ -116,6 +136,7 @@
       awayAtPause = isAway();
       away = awayAtPause;
     }
+    postFocus();
   }
 
   function resume() {
@@ -137,6 +158,7 @@
       } else {
         away = nowAway;
       }
+      postFocus();
     }, RESUME_DELAY);
   }
 
@@ -162,6 +184,7 @@
     } else if (!nowAway) {
       away = false;
     }
+    postFocus();
   }
 
   function isAway() {
@@ -190,16 +213,18 @@
       : '';
     root.innerHTML =
       '<style>' +
-      '.stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px}' +
+      '.stack{display:flex;flex-direction:column;align-items:flex-end;gap:6px}' +
       '.preview{display:block;width:160px;height:120px;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:#04070c;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transition:opacity .15s}' +
-      '.bubble{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(11,16,26,.88);color:#e5edf7;font:500 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);backdrop-filter:blur(8px)}' +
+      '.bubble{display:flex;align-items:baseline;gap:6px;padding:8px 12px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(11,16,26,.88);color:#e5edf7;font:500 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);backdrop-filter:blur(8px)}' +
       '.value{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;color:#4ade80}' +
       '.label{color:#94a3b8;font-size:11px}' +
+      '.cause{color:#94a3b8;font-size:11px;max-width:150px;overflow-wrap:anywhere}' +
       '</style>' +
       '<div class="stack">' +
       preview +
       '<div class="bubble" role="status" aria-live="polite">' +
-      '<span class="value">0</span><span class="label">tab / app switches</span></div>' +
+      '<span class="value">0</span><span class="label">events</span>' +
+      '<span class="cause" hidden></span></div>' +
       '</div>';
 
     const frame = root.querySelector('.preview');
@@ -207,23 +232,101 @@
     // the frame once it has loaded instead of flashing that panel.
     frame?.addEventListener('load', () => {
       frame.style.opacity = '1';
+      postFocus();
     });
 
+    frameEl = frame;
     valueEl = root.querySelector('.value');
+    causeEl = root.querySelector('.cause');
     document.documentElement.append(hostEl);
   }
 
-  function paintBubble(count) {
+  // One total plus the trigger for the last increment. `last` is replaced by the
+  // next one and cleared by undo()/Stop, so the label cannot go stale.
+  function paintBubble(state) {
     if (disposed || !enabled) return;
+    const total = (state?.count || 0) + (state?.lookAway || 0);
+    // The same state can arrive twice per increment (writeState, then storage), so
+    // only a rise compared with the last paint is news. A null state is another
+    // tab or Stop, and the first paint of a session is a baseline, not an event.
+    if (state && lastTotal !== null && total > lastTotal) ding();
+    lastTotal = state ? total : null;
     ensureBubble();
-    const text = String(count);
-    if (valueEl.textContent !== text) valueEl.textContent = text;
+    setText(valueEl, total);
+    setText(
+      causeEl,
+      state?.last
+        ? `· ${state.last.kind === 'away' ? 'looked away' : 'tab / app switch'}`
+        : '',
+    );
+    if (causeEl) causeEl.hidden = !state?.last;
+  }
+
+  // Best effort: a blocked or missing context must never affect counting.
+  function ding() {
+    try {
+      audio ??= new AudioContext();
+      if (audio.state === 'suspended') audio.resume().catch(() => {});
+      const start = audio.currentTime;
+      // One oscillator per burst: an oscillator cannot restart.
+      for (let i = 0; i < 3; i += 1) {
+        const at = start + i * PING_GAP;
+        const gain = audio.createGain();
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.linearRampToValueAtTime(PING_GAIN, at + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
+        const osc = audio.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(PING_HZ, at);
+        osc.frequency.linearRampToValueAtTime(PING_HZ - 200, at + 0.12);
+        osc.connect(gain).connect(audio.destination);
+        osc.start(at);
+        osc.stop(at + 0.13);
+      }
+    } catch {
+      // Audio is a nicety; counting must survive a refused context.
+    }
+  }
+
+  // Chrome autoplay policy: the first user gesture is what lets the context start.
+  function primeAudio() {
+    try {
+      audio ??= new AudioContext();
+      if (audio.state === 'suspended') audio.resume().catch(() => {});
+    } catch {
+      // Same best effort as ding().
+    }
+  }
+
+  function setText(element, value) {
+    const text = String(value);
+    if (element && element.textContent !== text) element.textContent = text;
+  }
+
+  function onStorageChanged(changes) {
+    if (disposed || !changes[KEY]) return;
+    // A state for another tab belongs to the tracker taking over; stop() handles ours.
+    if (changes[KEY].newValue?.tabId === tabId) paintBubble(changes[KEY].newValue);
+  }
+
+  // An iframe only reports document.hasFocus() when it is itself clicked, so the
+  // preview cannot see that its tab is focused. Tell it: it counts look-aways only
+  // while this tab is focused and visible, which pauses it while the popup is open.
+  function postFocus() {
+    frameEl?.contentWindow?.postMessage(
+      { type: 'anticheat:focus', focused: !paused && !isAway() },
+      '*',
+    );
   }
 
   function removeBubble() {
     hostEl?.remove();
     hostEl = null;
+    frameEl = null;
     valueEl = null;
+    causeEl = null;
+    // A restarted session starts silent: its first paint is a baseline.
+    lastTotal = null;
   }
 
   async function count() {
@@ -232,13 +335,17 @@
       enabled = false;
       return;
     }
-    await writeState({ ...state, count: (state.count || 0) + 1 });
+    await writeState({
+      ...state,
+      count: (state.count || 0) + 1,
+      last: { kind: 'switch', at: Date.now() },
+    });
   }
 
   async function undo() {
     const state = await readState();
     if (disposed || !state || state.tabId !== tabId) return;
-    await writeState({ ...state, count: Math.max(0, (state.count || 0) - 1) });
+    await writeState({ ...state, count: Math.max(0, (state.count || 0) - 1), last: null });
   }
 
   async function readState() {
@@ -253,7 +360,7 @@
   async function writeState(state) {
     try {
       await chrome.storage.session.set({ [KEY]: state });
-      paintBubble(state.count || 0);
+      paintBubble(state);
     } catch (error) {
       console.warn('Certification Anticheat tracker could not save the count.', error);
     }

@@ -40,11 +40,12 @@
         <h2>Anti-cheat</h2>
         <span class="pill" id="acBadge">Off</span>
       </div>
-      <p class="panel-note" id="acStatus">Counts when the watched tab is hidden or loses focus.</p>
+      <p class="panel-note" id="acStatus">Counts tab / app switches and camera look-aways.</p>
       <div class="panel-row">
         <span class="metric">
-          <span class="metric-value" id="switchCount" aria-live="polite">0</span>
-          <span class="metric-label">tab / app switches</span>
+          <span class="metric-value" id="totalCount" aria-live="polite">0</span>
+          <span class="metric-label">events</span>
+          <span class="last-cause" id="lastCause" aria-live="polite" hidden></span>
         </span>
         <div class="panel-actions">
           <button class="ghost" id="trackBtn" type="button" disabled>Start monitoring</button>
@@ -57,6 +58,12 @@
       <div class="legend">
         <span><i class="swatch green"></i>Open</span>
         <span><i class="swatch amber"></i>Closed</span>
+        <span><i class="swatch gauge"></i>On screen → away</span>
+        <label class="toggle" title="Show or hide the face overlay">
+          <input id="overlayToggle" type="checkbox" role="switch" aria-label="Overlay" checked>
+          <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+          <span class="toggle-text">Overlay</span>
+        </label>
         <span class="mirror">Preview is mirrored</span>
       </div>
       <p class="note">Everything is processed on your device. Nothing is uploaded.</p>

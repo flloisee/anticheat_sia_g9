@@ -8,7 +8,8 @@ const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
 
 const trackBtn = document.getElementById('trackBtn');
 const stopBtn = document.getElementById('stopBtn');
-const switchCount = document.getElementById('switchCount');
+const totalCount = document.getElementById('totalCount');
+const lastCause = document.getElementById('lastCause');
 const acStatus = document.getElementById('acStatus');
 const acBadge = document.getElementById('acBadge');
 
@@ -186,8 +187,17 @@ async function stopTracking() {
   paint();
 }
 
+// One persistent label for the last increment: `last` is replaced by the next one
+// and cleared by undo()/Stop, so it can never outlive what it describes.
 function paint() {
-  switchCount.textContent = String(tracked?.count ?? 0);
+  // The total is display-only: storage keeps switches and look-aways apart.
+  totalCount.textContent = String((tracked?.count || 0) + (tracked?.lookAway || 0));
+  lastCause.hidden = !tracked?.last;
+  lastCause.textContent = tracked?.last
+    ? tracked.last.kind === 'away'
+      ? 'looked away'
+      : 'tab / app switch'
+    : '';
   acBadge.textContent = tracked ? 'Watching' : 'Off';
   acBadge.className = `pill${tracked ? ' on' : ''}`;
 

@@ -3,7 +3,7 @@
 A Chrome extension prototype for anti-cheat in online quizzes and certification exams. It collects two signals while an exam is on screen:
 
 - **Tab / app switches** — counts how many times the watched exam tab is hidden or its browser window loses focus.
-- **Camera attention check** — opens the device camera and flags when the candidate's eyes are closed or not visible, a rough proxy for looking away from the screen.
+- **Camera attention check** — opens the device camera and flags when the candidate's eyes are closed, not visible, or turned away from the screen, a rough proxy for looking away.
 
 Everything runs locally. There are no network requests, no analytics, and nothing is uploaded.
 
@@ -11,7 +11,7 @@ Everything runs locally. There are no network requests, no analytics, and nothin
 
 This repo is the starting point for a Chrome extension based anti-cheat system. The goal is the set of controls real proctoring tools use — enforced full screen, tab and app monitoring, attention checks — added as separate, clearly-scoped features.
 
-The tab-switch counter is the first shipped signal. The camera check is an experiment: it uses MediaPipe's face landmark model to place boxes around the eyes and read open/closed state. It is a prototype attention check, not gaze tracking, and not a finished proctoring product (see [Limitations](#limitations)).
+The tab-switch counter is the first shipped signal. The camera check is an experiment: it uses MediaPipe's face landmark model to draw the detected face mesh as dots, place boxes around the eyes, read open/closed state, and make a crude estimate of which way the eyes point from where the iris sits inside each eye. The mesh colour shows that estimate: white while the eyes are on screen, yellow as they drift off centre, red once they reach the away threshold. That estimate uses fixed thresholds with no per-user calibration, so it is a prototype attention check, not reliable gaze tracking, and not a finished proctoring product (see [Limitations](#limitations)).
 
 ## Install
 
@@ -25,7 +25,7 @@ The tab-switch counter is the first shipped signal. The camera check is an exper
 ### Tab / app switch counter
 
 - **Start monitoring** asks the background worker to inject `tracker.js` into the active `http(s)` page. That script listens to `visibilitychange`, `blur`, and `focus` and adds one to the counter each time the watched tab is hidden or its window loses focus. Leaving and returning counts once, not once per event.
-- The count also shows in a floating bubble in the lower-right corner of the watched page, so it stays visible while the exam is on screen. The bubble is a shadow-root element with `pointer-events: none`, so page styles do not affect it and it never blocks the page.
+- The count also shows in a floating bubble in the lower-right corner of the watched page, so it stays visible while the exam is on screen. The bubble is a shadow-root element with `pointer-events: none`, so page styles do not affect it and it never blocks the page. It shows one total of both signals with the last trigger beside it, for example `4 events · looked away`. The total is only how the two are displayed: the stored state still keeps tab / app switches and look-aways apart, so nothing is merged or lost. A three-ping burst of short, loud, high-pitched tones plays when the total goes up, generated in the browser with the Web Audio API at a fixed level (no volume setting) — no audio files, nothing downloaded — and, because of the browser's autoplay rule, it can only sound once the page has been clicked at least once.
 - A small camera preview sits just above that bubble while a tab is tracked. It is the same `camera.html` in a tiny iframe, so the camera belongs to the watched tab and returns when that tab is focused again. It stays hidden until camera access has been granted once from the popup.
 - The counter lives in `chrome.storage.session` (key `anticheat`), so it survives closing the popup but is cleared when Chrome or the extension restarts. Starting to track another tab replaces the first one — only one tab is watched at a time.
 - While the popup is open it pauses the tracker, because focusing the popup would otherwise look like a focus loss. The tracker resumes when the popup closes. If the watched tab reloads, the injected script is gone; opening the popup on that tab reattaches it and keeps the existing count.
@@ -40,8 +40,10 @@ It looks for a timer, repeated question blocks, question counters ("1 of 10 Ques
 ### Camera attention check
 
 - `camera.js` gets a camera stream with `getUserMedia` and runs `FaceLandmarker` in `VIDEO` mode on each video frame.
-- Eye boxes are built from the face mesh's eye-contour landmarks, mirrored so they match the selfie preview. Green means open, amber means closed.
+- Eye boxes are built from the face mesh's eye-contour landmarks, mirrored so they match the selfie preview. Green means open, amber means closed. The full face mesh is drawn as small dots over the preview, coloured by how far the eyes are from the screen: white while on screen, yellow as they move off centre, red when the estimate reaches the away threshold — the same point that starts the look-away timer, so the counter moves only once the estimate gets there. The **Overlay** toggle in the footer legend hides the dots and the eye boxes, and applies to the on-page preview as well because the value is mirrored through session storage; it is purely visual, so the badge and the counting — including look-aways — are unaffected.
 - `eyeBlinkLeft` / `eyeBlinkRight` blendshapes decide whether each eye is open or closed.
+- Looking away is a crude iris-position heuristic, not calibrated gaze tracking. For each eye it takes the iris centre (mesh landmarks 468 and 473), works out where that sits inside the eye's bounding box in normalized coordinates (0.5 is centred), averages both eyes, and smooths the result. A sustained offset from centre — sideways or down — counts as looking away, with a tighter threshold to come back, so it does not flap. Only one count per episode: the eyes have to stay away for 1.2 s, and each new look-away is counted again. The first two seconds after the camera starts are ignored. No face, too few landmarks, closed eyes and a degenerate eye box never count, because camera glitches and blinks are not evidence of anything.
+- The look-away count is added to the same session state as the tab-switch count, so it counts towards the one total shown in the popup and in the on-page bubble while staying a separate field in storage. Only the camera preview inside the watched, focused tab can increment it: it checks the state's token and tab id before writing, never creates the state, and pauses while the extension popup is open or the tab is hidden (the frame is told when its tab is focused, because an iframe cannot tell that itself). The camera in the popup or the larger window still shows its live badge and mesh so the detector can be checked, but it never counts.
 - The header **Camera** toggle turns the camera off on demand: it stops the media tracks, closes the landmarker, clears the overlay, and shows a card to turn it back on. The state is not persisted; closing the popup already releases the camera.
 - While the page is hidden (a minimized window or another app in front), the detection loop falls back to a slower timer and keeps running; Chrome throttles hidden timers (down to about once a minute after five minutes), so detection is coarse there and resumes at full rate when the window is back. When a Chrome window regains focus, the camera resumes or reacquires the capture on its own, without the user clicking the extension, even if the camera page stays minimized.
 - MediaPipe's WASM runtime and the `face_landmarker.task` model are bundled under `vendor/` and `models/`, so the extension works offline and needs no remote code (required by Manifest V3).
@@ -64,7 +66,7 @@ The extension uses `activeTab` and `scripting` to inject the tracker only into t
 - The floating counter is a normal page element. A page script can remove it, and a page element in fullscreen covers it, so it is a visible reminder, not enforcement.
 - Boxes indicate that the model detected eye landmarks, not that nothing is covering the eye. Sunglasses or a hand over one eye can still produce a tracked box.
 - Blink detection is a blendshape score with a fixed 0.5 threshold; very small or far-away faces are less reliable.
-- The camera check does not yet estimate gaze direction. Closed or missing eyes are the only attention signal today.
+- The look-away check is a rough iris-position heuristic with fixed thresholds and no per-user calibration: head turns, glasses glare, lighting, camera angle and low resolution can all fool it in either direction, so a white, yellow or red mesh is a guess, not a measurement. It is a prototype attention check, not reliable gaze tracking, and it cannot tell a glance at a phone from a glance at a scratch pad.
 - If the GPU delegate is unavailable, it falls back to CPU automatically, which is slower.
 - A minimized or covered extension window slows the camera loop to a throttled timer, so detection while another app is in front is coarse (about once a minute after five minutes); the camera stream itself stays open, and it is reacquired automatically when a Chrome window regains focus.
 - This is not tamper-proof proctoring. It is a visible prototype of the signals an anti-cheat tool would collect.

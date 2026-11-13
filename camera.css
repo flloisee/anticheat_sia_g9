@@ -286,14 +286,18 @@ h1 {
 
 .panel-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
 }
+
+/* The counter stays left, the buttons keep the right edge. */
+.panel-row .panel-actions { margin-left: auto; }
 
 .metric {
   display: flex;
   align-items: baseline;
+  flex: none;
   gap: 5px;
   min-width: 0;
 }
@@ -318,6 +322,13 @@ h1 {
   flex: none;
   gap: 6px;
 }
+
+/* Persistent trigger for the total, inline beside it. */
+.last-cause {
+  color: #64748b;
+  font-size: 10.5px;
+}
+.last-cause::before { content: '·'; margin: 0 2px; }
 
 .ghost {
   padding: 5px 9px;
@@ -354,6 +365,7 @@ footer { display: flex; flex-direction: column; gap: 3px; }
 
 .legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   color: var(--muted);
@@ -371,6 +383,16 @@ footer { display: flex; flex-direction: column; gap: 3px; }
 
 .swatch.green { background: var(--green); }
 .swatch.amber { background: var(--amber); }
+.swatch.gauge {
+  width: 18px;
+  background: linear-gradient(90deg, #ffffff, #facc15, #ef4444);
+}
+
+/* The overlay switch sits with the legend it explains, at legend scale. */
+.legend .toggle { gap: 5px; font-size: 10.5px; }
+.legend .track { width: 24px; height: 14px; }
+.legend .thumb { width: 8px; height: 8px; }
+.legend .toggle input:checked + .track .thumb { transform: translateX(10px); }
 
 .mirror { margin-left: auto; color: #64748b; }
 

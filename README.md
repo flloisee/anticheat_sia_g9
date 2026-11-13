@@ -1,4 +1,4 @@
-# anticheat_sia_g9
+# Certification Anticheat
 
 A Chrome extension prototype for anti-cheat in online quizzes and certification exams. It collects two signals while an exam is on screen:
 

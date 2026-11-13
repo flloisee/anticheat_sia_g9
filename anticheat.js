@@ -1,6 +1,7 @@
 // Popup-side anti-cheat panel. One watched tab at a time, counted by tracker.js
 // whenever that tab is hidden or the browser window loses focus.
 const AC_KEY = 'anticheat';
+// SIGNAL_WEIGHTS and sniffExam come from sniff.js, loaded just before this file.
 // camera.html is also embedded as the small preview in the tracked page; the
 // panel and its listeners belong to the popup only.
 const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
@@ -52,13 +53,56 @@ async function refresh(attach = false) {
   if (tracked && !(await tabExists(tracked.tabId))) {
     tracked = null;
     await chrome.storage.session.remove(AC_KEY);
-    note = 'The watched tab was closed. Track a tab to start again.';
+    note = 'The watched tab was closed. Start monitoring to begin again.';
   }
 
   [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tracked) await maybeSuggest(activeTab);
 
   if (attach && tracked && activeTab?.id === tracked.tabId) await attachTracker();
   paint();
+}
+
+// Detection only ever offers. The tracker, camera and storage stay untouched until
+// the user presses Start, either on the on-page prompt or in the popup.
+async function maybeSuggest(tab) {
+  if (PREVIEW || tracked || !canInject(tab)) return;
+
+  try {
+    // allFrames covers same-origin quiz iframes; cross-origin frames are skipped
+    // by Chrome and simply contribute nothing.
+    const frames = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: sniffExam,
+    });
+
+    const reasons = new Set();
+    for (const frame of frames ?? []) {
+      for (const reason of frame?.result?.reasons ?? []) {
+        if (Object.hasOwn(SIGNAL_WEIGHTS, reason)) reasons.add(reason);
+      }
+    }
+
+    const score = [...reasons].reduce((sum, reason) => sum + SIGNAL_WEIGHTS[reason], 0);
+    if (score >= 3) await showPrompt(tab, [...reasons]);
+  } catch {
+    // A page we cannot inspect is simply not suggested.
+  }
+}
+
+// The prompt lives in the page, so it stays clickable after this popup closes and
+// the worker can still act on the answer.
+async function showPrompt(tab, reasons) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['prompt.js'],
+    });
+  } catch {
+    // A page that rejects injection gets no prompt.
+    return;
+  }
+  await send(tab.id, { type: 'anticheat:show-prompt', reasons });
 }
 
 async function attachTracker() {
@@ -84,7 +128,7 @@ async function attachTracker() {
     keepAlive();
   } catch (error) {
     console.warn('Eye Check could not reattach the tab monitor.', error);
-    note = 'Open this tab again and press Track to resume counting.';
+    note = 'Open this tab again and press Start monitoring to resume counting.';
   }
 }
 
@@ -110,30 +154,12 @@ async function trackThisTab() {
   paint();
 
   disconnect();
-  if (tracked) await send(tracked.tabId, { type: 'anticheat:stop' });
 
   try {
-    await chrome.storage.session.set({
-      [AC_KEY]: {
-        tabId: tab.id,
-        windowId: tab.windowId,
-        title: tab.title || '',
-        url: tab.url || '',
-        count: 0,
-        // Lets only this tab's tracker start the embedded camera preview.
-        token: crypto.randomUUID(),
-        startedAt: Date.now(),
-      },
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['tracker.js'],
-    });
-    await send(tab.id, {
-      type: 'anticheat:start',
-      tabId: tab.id,
-      windowId: tab.windowId,
-    });
+    // The worker owns the start so the on-page prompt can use the same path after
+    // this popup has closed.
+    const reply = await chrome.runtime.sendMessage({ type: 'anticheat:start-tab', tabId: tab.id });
+    if (!reply?.ok) throw new Error('start rejected');
     keepAlive();
     note = '';
   } catch (error) {
@@ -166,11 +192,12 @@ function paint() {
   acBadge.className = `pill${tracked ? ' on' : ''}`;
 
   if (!tracked) {
-    acStatus.textContent = note || 'Counts when the watched tab is hidden or loses focus.';
+    acStatus.textContent =
+      note || 'Not monitoring this page. If this is your exam, start monitoring manually.';
     acStatus.title = '';
-    trackBtn.textContent = 'Track this tab';
+    trackBtn.textContent = 'Start monitoring';
     trackBtn.disabled = busy || !canInject(activeTab);
-    trackBtn.title = canInject(activeTab) ? '' : 'Open a normal web page to track it.';
+    trackBtn.title = canInject(activeTab) ? '' : 'Open a normal web page to monitor it.';
     stopBtn.hidden = true;
     return;
   }
@@ -180,7 +207,7 @@ function paint() {
   acStatus.title = `${tracked.title || ''}\n${tracked.url || ''}`.trim();
 
   const sameTab = activeTab?.id === tracked.tabId;
-  trackBtn.textContent = sameTab ? 'Tracking this tab' : 'Track this tab instead';
+  trackBtn.textContent = sameTab ? 'Monitoring this tab' : 'Monitor this tab instead';
   trackBtn.disabled = sameTab || busy || !canInject(activeTab);
   trackBtn.title = canInject(activeTab) ? '' : 'Open a normal web page to track it.';
   stopBtn.hidden = false;

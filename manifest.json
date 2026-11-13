@@ -4,6 +4,33 @@
   "version": "1.1.0",
   "description": "Camera eye check plus a tab/app switch counter for online exams.",
   "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "*://*.netacad.com/*",
+    "*://*.netacad.net/*",
+    "*://*.skillsforall.com/*",
+    "*://*.fortinet.com/*",
+    "*://*.juniper.net/*",
+    "*://*.paloaltonetworks.com/*",
+    "*://*.checkpoint.com/*",
+    "*://*.cybrary.it/*",
+    "*://*.acloudguru.com/*",
+    "*://*.pluralsight.com/*",
+    "*://*.kodekloud.com/*",
+    "*://*.coursera.org/*",
+    "*://*.udemy.com/*",
+    "*://*.edx.org/*",
+    "*://*.offsec.com/*",
+    "*://*.isc2.org/*",
+    "*://*.certiport.com/*",
+    "*://*.pearsonvue.com/*",
+    "*://*.prometric.com/*",
+    "*://*.psiexams.com/*",
+    "*://*.testout.com/*",
+    "*://*.comptia.org/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
   "action": {
     "default_title": "Certification Anticheat",
     "default_popup": "camera.html"
@@ -13,6 +40,37 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.netacad.com/*",
+        "*://*.netacad.net/*",
+        "*://*.skillsforall.com/*",
+        "*://*.fortinet.com/*",
+        "*://*.juniper.net/*",
+        "*://*.paloaltonetworks.com/*",
+        "*://*.checkpoint.com/*",
+        "*://*.cybrary.it/*",
+        "*://*.acloudguru.com/*",
+        "*://*.pluralsight.com/*",
+        "*://*.kodekloud.com/*",
+        "*://*.coursera.org/*",
+        "*://*.udemy.com/*",
+        "*://*.edx.org/*",
+        "*://*.offsec.com/*",
+        "*://*.isc2.org/*",
+        "*://*.certiport.com/*",
+        "*://*.pearsonvue.com/*",
+        "*://*.prometric.com/*",
+        "*://*.psiexams.com/*",
+        "*://*.testout.com/*",
+        "*://*.comptia.org/*"
+      ],
+      "js": ["sniff.js", "detect.js", "prompt.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
   },

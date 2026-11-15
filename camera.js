@@ -11,7 +11,6 @@ const video = $('video');
 const canvas = $('overlay');
 const ctx = canvas.getContext('2d');
 const stage = $('stage');
-const dot = $('dot');
 const badge = $('badge');
 const empty = $('empty');
 const emptyTitle = $('emptyTitle');
@@ -40,8 +39,8 @@ const AWAY_MS = 1200;
 // Mesh colour: white while on screen, yellow as the iris drifts, red at the away
 // entry threshold — the same point that starts the look-away timer.
 const GAZE_ON_COLOR = '#ffffff';
-const GAZE_MID_COLOR = '#facc15';
-const GAZE_AWAY_COLOR = '#ef4444';
+const GAZE_MID_COLOR = '#ffd60a';
+const GAZE_AWAY_COLOR = '#ff453a';
 
 // The overlay switch is shared by every camera page (popup, window, on-page
 // preview) through session storage; a missing key means on.
@@ -188,7 +187,7 @@ async function start() {
   wanted = true;
   setToggle(true);
   hideCard();
-  setBadge('Starting camera…', 'warn');
+  setBadge('Starting camera…');
 
   let nextStream;
   try {
@@ -217,7 +216,7 @@ async function start() {
   if (id !== session) return;
   resizeToVideo();
 
-  setBadge('Loading eye detector…', 'warn');
+  setBadge('Loading eye detector…');
   let nextLandmarker;
   try {
     nextLandmarker = await createLandmarker();
@@ -227,7 +226,7 @@ async function start() {
     stopStream();
     starting = false;
     setToggle(false);
-    setBadge('Camera off', 'idle');
+    setBadge('Camera off');
     showCard(
       'The eye detector could not load',
       'Reload the extension and try again. If it keeps failing, your browser may be blocking WebAssembly.',
@@ -249,7 +248,7 @@ async function start() {
   // Samples from before the camera was live are useless; the warm-up also covers
   // the moment the eye detector settles.
   resetGaze();
-  setBadge('No eyes visible', 'idle');
+  setBadge('No eyes visible');
   empty.hidden = true;
   schedule(id);
 }
@@ -266,7 +265,7 @@ function stopCamera() {
   resetGaze();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   setToggle(false);
-  setBadge('Camera off', 'idle');
+  setBadge('Camera off');
   showCard(
     'Camera is off',
     'The camera is released until you turn it back on. Nothing is recorded or uploaded.',
@@ -419,7 +418,7 @@ function draw(result) {
   if (!landmarks) {
     // A missing face is a glitch, never evidence of looking away.
     clearAway();
-    setBadge('No eyes visible', 'idle');
+    setBadge('No eyes visible');
     return;
   }
 
@@ -436,7 +435,7 @@ function draw(result) {
 
   if (!rightBox || !leftBox) {
     clearAway();
-    setBadge('Keep both eyes in frame', 'warn');
+    setBadge('Keep both eyes in frame');
     return;
   }
 
@@ -448,13 +447,13 @@ function draw(result) {
   }
 
   if (!rightOpen && !leftOpen) {
-    setBadge('Eyes visible · closed', 'warn');
+    setBadge('Eyes visible · closed');
   } else if (!rightOpen || !leftOpen) {
-    setBadge('Eyes visible · one closed', 'warn');
+    setBadge('Eyes visible · one closed');
   } else if (away) {
-    setBadge('Eyes visible · looking away', 'warn');
+    setBadge('Eyes visible · looking away');
   } else {
-    setBadge('Eyes visible · open', 'live');
+    setBadge('Eyes visible · open');
   }
 }
 
@@ -637,7 +636,7 @@ function eyeBox(landmarks, indices, width, height) {
 }
 
 function drawEye(box, label, open) {
-  const color = open ? '#4ade80' : '#fbbf24';
+  const color = open ? '#30d158' : '#ffd60a';
   const scale = Math.max(1, canvas.width / 320);
   const radius = Math.min(10 * scale, box.w / 4);
 
@@ -666,9 +665,8 @@ function drawEye(box, label, open) {
   ctx.restore();
 }
 
-function setBadge(text, tone) {
+function setBadge(text) {
   badge.textContent = text;
-  dot.className = `dot ${tone}`;
 }
 
 function setToggle(on) {
@@ -694,7 +692,7 @@ function showBlocked() {
     'Open settings',
     openSettings,
   );
-  setBadge('Camera off', 'idle');
+  setBadge('Camera off');
 }
 
 function handleCameraError(error) {
@@ -722,7 +720,7 @@ function handleCameraError(error) {
       start,
     );
   }
-  setBadge('Camera off', 'idle');
+  setBadge('Camera off');
 }
 
 function openWindow() {

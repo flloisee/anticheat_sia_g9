@@ -213,12 +213,15 @@
       : '';
     root.innerHTML =
       '<style>' +
-      '.stack{display:flex;flex-direction:column;align-items:flex-end;gap:6px}' +
-      '.preview{display:block;width:160px;height:120px;overflow:hidden;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:#04070c;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transition:opacity .15s}' +
-      '.bubble{display:flex;align-items:baseline;gap:6px;padding:8px 12px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(11,16,26,.88);color:#e5edf7;font:500 12px/1 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);backdrop-filter:blur(8px)}' +
-      '.value{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;color:#4ade80}' +
-      '.label{color:#94a3b8;font-size:11px}' +
-      '.cause{color:#94a3b8;font-size:11px;max-width:150px;overflow-wrap:anywhere}' +
+      '.stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px}' +
+      '.preview{display:block;width:160px;height:120px;overflow:hidden;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:#04070c;box-shadow:0 12px 32px rgba(0,0,0,.45);opacity:0;transition:opacity 180ms ease-out}' +
+      '.bubble{display:flex;align-items:baseline;gap:6px;padding:7px 13px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(28,28,30,.78);color:#f5f5f7;font:500 12px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.07);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}' +
+      '.value{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:#f5f5f7}' +
+      '.label{font-size:11px;font-weight:500;color:rgba(235,235,245,.6)}' +
+      '.cause{font-size:11px;color:rgba(235,235,245,.6);max-width:150px;overflow-wrap:anywhere}' +
+      '@media (prefers-reduced-transparency:reduce){.bubble{background:#1c1c1e;-webkit-backdrop-filter:none;backdrop-filter:none}}' +
+      '@media (prefers-contrast:more){.bubble{background:#1c1c1e;border-color:rgba(255,255,255,.32)}}' +
+      '@media (prefers-reduced-motion:reduce){.preview{transition:none}}' +
       '</style>' +
       '<div class="stack">' +
       preview +

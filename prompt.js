@@ -53,18 +53,25 @@
     const root = hostEl.attachShadow({ mode: 'open' });
     root.innerHTML =
       '<style>' +
-      '.backdrop{display:flex;align-items:center;justify-content:center;position:fixed;inset:0;padding:16px;background:rgba(2,6,12,.55)}' +
-      '.card{box-sizing:border-box;width:min(420px,calc(100vw - 32px));padding:20px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:#0b1219;color:#e5edf7;font:400 13px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 24px 64px rgba(0,0,0,.45)}' +
-      'h2{margin:0 0 8px;font-size:15px;font-weight:650}' +
-      'p{margin:0 0 14px;color:#94a3b8}' +
-      '.error{color:#fca5a5}' +
+      '*,::before,::after{box-sizing:border-box}' +
+      '.backdrop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.42);-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%);animation:ec-fade .16s ease-out}' +
+      '.card{width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:24px;border:1px solid rgba(255,255,255,.09);border-radius:20px;background:rgba(28,28,30,.78);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:0 24px 64px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.07);color:#f5f5f7;font:400 13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;animation:ec-pop .2s cubic-bezier(.32,.72,0,1)}' +
+      'h2{margin:0 0 8px;font-size:17px;line-height:1.3;font-weight:600;letter-spacing:-.01em}' +
+      'p{margin:0 0 16px;overflow-wrap:anywhere;color:rgba(235,235,245,.62);font-size:13px;line-height:1.5}' +
+      '.error{color:#ff453a}' +
       '.actions{display:flex;flex-wrap:wrap;gap:8px}' +
-      'button{padding:8px 14px;border:1px solid rgba(148,163,184,.28);border-radius:9px;background:transparent;color:#e5edf7;font:inherit;font-size:12px;cursor:pointer}' +
-      'button:hover:not(:disabled){border-color:rgba(148,163,184,.5)}' +
-      'button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}' +
-      'button:disabled{color:#64748b;cursor:default}' +
-      '.primary{border-color:transparent;background:#4ade80;color:#052e16;font-weight:650}' +
-      '.primary:disabled{background:#1e293b;color:#64748b}' +
+      'button{min-height:38px;padding:0 16px;border:1px solid rgba(255,255,255,.09);border-radius:11px;background:rgba(255,255,255,.08);color:#f5f5f7;font:500 13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",sans-serif;cursor:pointer;transition:background-color .09s ease-out,border-color .16s ease-out,transform .09s ease-out,opacity .09s ease-out}' +
+      'button:hover:not(:disabled){background:rgba(255,255,255,.14)}' +
+      'button:active:not(:disabled){transform:scale(.98)}' +
+      'button:focus-visible{outline:2px solid #0a84ff;outline-offset:2px}' +
+      'button:disabled{opacity:.45;cursor:default}' +
+      '.primary{border-color:transparent;background:#0a84ff;color:#fff}' +
+      '.primary:hover:not(:disabled){background:#2f96ff}' +
+      '@keyframes ec-fade{from{opacity:0}to{opacity:1}}' +
+      '@keyframes ec-pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}' +
+      '@media (prefers-reduced-motion:reduce){.backdrop{animation:none}.card{animation:ec-fade .2s ease-out}}' +
+      '@media (prefers-reduced-transparency:reduce){.backdrop,.card{-webkit-backdrop-filter:none;backdrop-filter:none}.card{background:#1c1c1e}}' +
+      '@media (prefers-contrast:more){.card{background:#1c1c1e;border-color:rgba(255,255,255,.35)}}' +
       '</style>' +
       '<div class="backdrop">' +
       '<div class="card" role="dialog" aria-modal="true" aria-labelledby="ec-title">' +
@@ -77,7 +84,9 @@
       '</div></div></div>';
 
     const detail = root.querySelector('.detail');
-    detail.textContent = `This page looks like an exam section (${reasons.join(', ')}). Monitoring stays off until you start. Start and the counter (plus the camera preview) begin only after you press Start.`;
+    detail.textContent = reasons.length
+      ? `This page looks like an exam section (${reasons.join(', ')}). Nothing starts until you choose.`
+      : 'This page looks like an exam section. Nothing starts until you choose.';
 
     const buttons = [...root.querySelectorAll('button')];
     let busy = false;
